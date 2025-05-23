@@ -8,6 +8,8 @@ import threading
 import numpy as np
 import os
 
+def moving_average(data, window_size):
+    return np.convolve(data, np.ones(window_size) / window_size, mode='valid')
 # --- 개별 사람을 나타내는 클래스 ---
 class Person:
     def __init__(self, x, y, vx, vy, radius=5):
@@ -125,10 +127,51 @@ class SIRSimulation:
         return True
 
     def show_graph(self):
+        import matplotlib.pyplot as plt
+        import matplotlib.patches as mpatches
+
         s, i, r = zip(*self.history)
         time = range(len(s))
 
-        plt.figure(figsize=(12, 5))
+        # 스타일 적용 (배경 검정)
+        plt.style.use('dark_background')
+        fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+
+        # --- 왼쪽: SIR 면적 그래프 ---
+        axes[0].stackplot(time, s, i, r,
+                         labels=['Susceptible', 'Infected', 'Recovered'],
+                         colors=['#1f77b4', '#ff7f0e', '#2c2c2c'])  # 파랑, 주황, 진회색
+        axes[0].set_title("SIR Model Dynamics", fontsize=14)
+        axes[0].set_xlabel("Time Steps")
+        axes[0].set_ylabel("Population")
+        axes[0].legend(loc='lower right')
+        axes[0].grid(False)
+
+        # 오른쪽 여백에 수직 괄호 스타일로 텍스트 표현
+        axes[0].annotate('Removed',
+                         xy=(1.01, 0.5), xycoords='axes fraction',
+                         va='center', ha='left',
+                         fontsize=12, rotation=90,
+                         color='white',
+                         annotation_clip=False)
+
+        # --- 오른쪽: R₀ 이동 평균 그래프 ---
+        window_size = 10
+        r0_avg = moving_average(self.r0_history, window_size)
+        avg_time = range(window_size - 1, len(self.r0_history))
+
+        axes[1].plot(avg_time, r0_avg, color='orange', linewidth=2, label=f'Moving Avg R₀ (w={window_size})')
+        axes[1].axhline(y=1, color='gray', linestyle='--', linewidth=1)
+
+        axes[1].set_title("Estimated R₀ Over Time", fontsize=14)
+        axes[1].set_xlabel("Time Steps")
+        axes[1].set_ylabel("R₀")
+        axes[1].legend(loc='upper right')
+        axes[1].grid(False)
+
+        plt.tight_layout()
+        plt.show()
+
 
         # SIR 곡선
         plt.subplot(1, 2, 1)
@@ -192,22 +235,21 @@ def start_simulation():
         mask = mask_var.get()
         distancing = distancing_var.get()
         movement = movement_var.get()
-
         mask_effectiveness = 0.5 if mask else 0.0
 
         def run_sim():
+            global sim_history, sim_r0  # 전역 변수 선언
             sim = SIRSimulation(beta, recovery_time, population, mask_effectiveness, distancing, movement)
             sim.run()
-
-         # 실행 후 결과 저장 (전역 변수 사용)
-        global sim_history, sim_r0
-        sim_history = sim.history
-        sim_r0 = sim.r0_history
+            sim_history = sim.history
+            sim_r0 = sim.r0_history
 
         threading.Thread(target=run_sim).start()
 
     except ValueError:
         print("입력값을 숫자로 입력해주세요.")
+
+        
 # R0 평균 계산
 def moving_average(data, window_size):
     return np.convolve(data, np.ones(window_size) / window_size, mode='valid')
